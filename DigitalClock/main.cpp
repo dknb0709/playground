@@ -1,79 +1,24 @@
-#include <sys/ioctl.h>
-#include <unistd.h>
 #include <cmath>
 #include <iostream>
 #include <thread>
 
-struct Color {
-  int r, g, b;
-};
+#include <Terminal.hpp>
 
-class Console {
-  ::winsize window_;
+std::string getTimeString() {
+  std::time_t t = std::time(nullptr);
+  char mbstr[100];
+  std::strftime(mbstr, sizeof(mbstr), "%H%M%S", std::localtime(&t));
+  return mbstr;
+}
 
- public:
-  Console() { ::ioctl(STDOUT_FILENO, TIOCGWINSZ, &window_); }
+constexpr int ctoi(const char c) { return c - '0'; }
 
-  void setColor(int fgColor, int bgColor) {
-    std::cout << "\033[38;5;" << fgColor << "m";
-    std::cout << "\033[48;5;" << bgColor << "m";
-  }
-  void setColor(const Color &fgColor, const Color &bgColor) {
-    std::cout << "\033[48;2;" << fgColor.r << ";" << fgColor.g << ";"
-              << fgColor.b << "m";
-    std::cout << "\033[38;2;" << bgColor.r << ";" << bgColor.g << ";"
-              << bgColor.b << "m";
-  }
-  void setDefaultColor() {
-    std::cout << "\033[39m" << std::flush;
-    std::cout << "\033[49m" << std::flush;
-  }
-
-  /**
-   * @param n: 1 to 255
-   */
-  void pickFromJetColorMap(int n) {
-    int r = (int)(128 - 127 * ::cosf(n * 0.01227 * 1));
-    int g = (int)(128 - 127 * ::cosf(n * 0.01227 * 3));
-    int b = (int)(128 - 127 * ::cosf(n * 0.01227 * 5));
-    setColor({r, g, b}, {255 - r, 255 - g, 255 - b});
-  }
-
-  int getWidth() noexcept { return window_.ws_col; }
-  int getHeight() noexcept { return window_.ws_row; }
-
-  void moveUp(int amount) {
-    std::cout << "\033[" << amount << "A" << std::flush;
-  }
-  void moveDown(int amount) {
-    std::cout << "\033[" << amount << "B" << std::flush;
-  }
-  void moveRight(int amount) {
-    std::cout << "\033[" << amount << "C" << std::flush;
-  }
-  void moveLeft(int amount) {
-    std::cout << "\033[" << amount << "D" << std::flush;
-  }
-  void moveTo(int x, int y) {
-    std::cout << "\033[" << y << ";" << x << "H" << std::flush;
-  }
-  void moveToHead() { moveTo(1, 1); }
-  void put(int x, int y, char c) {
-    moveTo(x, y);
-    std::cout << c << std::flush;
-  }
-  void put(int x, int y, const std::string &s) {
-    moveTo(x, y);
-    std::cout << s << std::flush;
-  }
-  /**
-   * clears entire screen and delete all lines saved in the scrollback buffer
-   */
-  void clear() { std::cout << "\033[3J"; }
+struct Vec2 {
+  int x, y;
 };
 
 class SevenSegmentDisplay {
-  Console c;
+  Terminal c;
   bool segment[7];
 
   using Segment = bool[7];
@@ -84,7 +29,7 @@ class SevenSegmentDisplay {
                            {1, 1, 1, 1, 1, 1, 1}, {1, 1, 1, 1, 0, 1, 1}};
 
  public:
-  SevenSegmentDisplay(Console &c_) : c{c_} { setNumber(number[0]); }
+  SevenSegmentDisplay(Terminal &c_) : c{c_} { setNumber(number[0]); }
   void setNumber(int n) { setNumber(number[n]); }
   void putNumber(int x, int y, int scale) {
     putSegmentA(x, y, scale);
@@ -146,20 +91,14 @@ class SevenSegmentDisplay {
   }
 };
 
-struct Vec2 {
-  int x, y;
-};
-
-#include <chrono>
-
-class Clock {
-  Console c;
+class DigitalClock {
+  Terminal c;
   SevenSegmentDisplay seg[6] = {c, c, c, c, c, c};
   Vec2 pos;
   int scale;
 
  public:
-  Clock(Console &c_) : c{c_} {
+  DigitalClock(Terminal &c_) : c{c_} {
     pos.x = 1;
     pos.y = 1;
     scale = 2;
@@ -197,27 +136,18 @@ class Clock {
   }
 };
 
-#include <time.h>
-
-std::string getTimeString() {
-  std::time_t t = std::time(nullptr);
-  char mbstr[100];
-  std::strftime(mbstr, sizeof(mbstr), "%H%M%S", std::localtime(&t));
-  return mbstr;
-}
-
-int ctoi(const char c) { return c - '0'; }
-
 int main() {
-  Console c;
-  Clock clock(c);
-  const int SCALE = 1;
+  Terminal c;
+  DigitalClock clock(c);
+  const int SCALE = 2;
   const int NUM_SEGMENTS = 8;
   const int WIDTH = (SCALE + 3) * NUM_SEGMENTS - 1;
   const int HEIGHT = SCALE * 2 + 3;
   clock.setScale(SCALE);
   Vec2 velocity{2, 1};
-  for (int i = 0; i < 9999; ++i) {
+  uint32_t i = 0u;
+
+  while (true) {
     c.clear();
 
     std::string timeStr = getTimeString();
@@ -245,19 +175,8 @@ int main() {
 
     clock.setPosition(newX, newY);
     clock.setTime(d1, d2, d3, d4, d5, d6);
-    c.pickFromJetColorMap(i);
+    c.pickFromJetColorMap(i++);
     clock.put();
     std::this_thread::sleep_for(std::chrono::milliseconds(250));
   }
-  std::cin.get();
-
-  // demo256Colors();
-  // demo16MilionColors();
-  // Console c;
-  // rectAngle(c.getWidth() / 2, c.getHeight() / 2, c.getWidth() / 2 - 1,
-  //           c.getHeight() / 2 - 1, 200);
-  // for (int i = 1; i < 256; ++i) {
-  //   rectAngle(0, 0, c.getWidth(), c.getHeight(), i);
-  //   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  // }
 }
