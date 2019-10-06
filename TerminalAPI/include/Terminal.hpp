@@ -15,8 +15,8 @@ class Terminal {
  public:
   Terminal();
 
-  void setColor(int fgColor, int bgColor)
-      ; void setColor(const Color &fgColor, const Color &bgColor);
+  void setColor(int fgColor, int bgColor);
+  void setColor(const Color &fgColor, const Color &bgColor);
   void setDefaultColor();
 
   /**
